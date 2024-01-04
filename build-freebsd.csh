@@ -26,7 +26,7 @@ cd kawpow-master
 python3.9 setup.py clean
 rm -rf build/*, dist/*
 python3.9 setup.py install --verbose
-
+cd ..
 
 
 
