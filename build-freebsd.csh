@@ -2,6 +2,8 @@
 
 # RUN AS ROOT
 
+set curdir = `pwd`
+
 setenv CC /usr/local/bin/gcc
 setenv CXX /usr/local/bin/g++
 setenv AR /usr/local/bin/ar
@@ -26,7 +28,12 @@ cd kawpow-master
 python3.9 setup.py clean
 rm -rf build/*, dist/*
 python3.9 setup.py install --verbose
+
 cd ..
+cd $curdir
+./run_electrum
+
+
 
 
 
