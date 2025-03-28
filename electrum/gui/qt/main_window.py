@@ -208,6 +208,9 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger, QtEventListener):
         coincontrol_sb = self.create_coincontrol_statusbar()
 
         self.tabs = tabs = QTabWidget(self)
+
+        tabs.tabBarClicked.connect(self.on_tab_clicked)
+
         self.send_tab = self.create_send_tab()
         self.asset_tab = self.create_asset_tab()
         self.receive_tab = self.create_receive_tab()
@@ -445,6 +448,24 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger, QtEventListener):
     def on_event_new_transaction(self, wallet, tx):
         if wallet == self.wallet:
             self.tx_notification_queue.put(tx)
+
+    def on_tab_clicked(self, i):
+        if i >= 0 and i == self.tabs.indexOf(self.broadcast_view_tab):
+            self.broadcast_view_tab.has_new = False
+            self.broadcast_view_tab.tab_icon = read_QIcon('broadcast_recv.png')
+            self.tabs.setTabIcon(i, self.broadcast_view_tab.tab_icon)
+
+    @qt_event_listener
+    def on_event_adb_added_verified_broadcast(self, *args):
+        if self.broadcast_view_tab.has_new:
+            return
+        i = self.tabs.indexOf(self.broadcast_view_tab)
+        if i == self.tabs.currentIndex():
+            return
+        self.broadcast_view_tab.has_new = True
+        self.broadcast_view_tab.tab_icon = read_QIcon('new_broadcast.png')
+        if i >= 0:
+            self.tabs.setTabIcon(i, self.broadcast_view_tab.tab_icon)
 
     @qt_event_listener
     def on_event_status(self):
@@ -1175,6 +1196,13 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger, QtEventListener):
 
     def show_receive_tab(self):
         self.tabs.setCurrentIndex(self.tabs.indexOf(self.receive_tab))
+
+    def show_owned_asset(self, asset: str):
+        if sum(self.wallet.get_balance(asset_aware=True).get(asset, (0,))) == 0:
+            self.show_asset_data(asset)
+            return
+        self.tabs.setCurrentIndex(self.tabs.indexOf(self.asset_tab))
+        self.asset_tab.display_asset(asset)
 
     def create_send_tab(self):
         from .send_tab import SendTab
@@ -2732,7 +2760,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger, QtEventListener):
 
             base_inputs = [coin for coin in coins if coin.asset is None]
             base_output = [PartialTxOutput.from_address_and_value(addr, value='!')]
-        
+
             asset_inputs = [coin for coin in coins if coin.asset]  # type: List[PartialTxInput]
             asset_amounts = defaultdict(int)
             for coin in asset_inputs:
@@ -2789,13 +2817,13 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger, QtEventListener):
                             message_use_own_coin = True
                             self.show_message(_('Some of your utxos will be used to handle fees'))
                         additional_inputs.append(my_coins.pop())
-                
+
                 tx.add_inputs(asset_inputs)
                 tx.add_outputs(asset_outputs)
                 tx.locktime = get_locktime_for_new_transaction(self.network)
                 tx.add_info_from_wallet(self.wallet)
                 return tx
-            
+
             conf_dlg = ConfirmTxDialog(window=self, make_tx=make_tx, output_value='!')
             if conf_dlg.not_enough_funds:
                 # note: use confirmed_only=False here, regardless of config setting,
@@ -2812,7 +2840,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger, QtEventListener):
             if is_preview:
                 self.show_transaction(tx)
                 return
-            
+
             def sign_done(success):
                 def sign_done2(success):
                     if success:
@@ -2833,9 +2861,9 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger, QtEventListener):
                 external_keypairs=keypairs,
                 locking_script_overrides=outpoint_to_locking_script)
 
-        
+
         def on_failure(exc_info):
-            self.on_error(exc_info)                                                                                 
+            self.on_error(exc_info)
         msg = _('Preparing sweep transaction...')
         task = lambda: self.network.run_from_another_thread(
             sweep_preparations(privkeys, self.network))
